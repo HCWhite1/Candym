@@ -1,0 +1,20 @@
+node_modules/
+
+# Base de données locale (créée au premier lancement depuis db/*.sql)
+db/radar.db
+db/radar.db-wal
+db/radar.db-shm
+db/backups/
+db/coffre/
+
+# Données personnelles locales
+brouillons-stage-2027/
+stages-2027-entreprises.csv
+recapitulatif.csv
+hors-criteres/
+valides/
+/backups/
+/coffre/
+/defaults.sql
+.claude/
+.env

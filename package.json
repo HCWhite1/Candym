@@ -1,0 +1,25 @@
+{
+  "name": "candym",
+  "version": "3.0.0",
+  "description": "Suivi de candidatures (stages, alternances, emplois) — serveur local Express + SQLite",
+  "type": "module",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node --disable-warning=ExperimentalWarning src/server.js",
+    "test": "node --disable-warning=ExperimentalWarning --test",
+    "reset-db": "node --disable-warning=ExperimentalWarning scripts/reset-db.js"
+  },
+  "engines": {
+    "node": ">=22.5"
+  },
+  "dependencies": {
+    "@napi-rs/keyring": "^2.1.0",
+    "express": "^5.1.0",
+    "imapflow": "^2.0.6",
+    "mailparser": "^3.9.14",
+    "nodemailer": "^10.0.10"
+  },
+  "devDependencies": {
+    "smtp-server": "^3.19.13"
+  }
+}

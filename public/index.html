@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Candym — Suivi de candidatures</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='12' fill='none' stroke='%23FFB454' stroke-width='3'/%3E%3Ccircle cx='16' cy='16' r='4' fill='%235B9DFF'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+<div id="apperror" role="alert"><i data-icon="alert"></i> Impossible de joindre le serveur. Vérifie qu'il tourne (<code>start.bat</code> ou <code>npm start</code> dans le dossier du projet) puis recharge la page.</div>
+
+<header class="appbar">
+  <div class="brand">
+    <h1>CANDYM</h1>
+    <div class="sub">suivi de candidatures</div>
+  </div>
+  <nav class="appnav" aria-label="Outils">
+    <button class="btn ghost" id="btnDiscover" title="Trouver des entreprises et des offres"><i data-icon="compass"></i> Découvrir</button>
+    <button class="btn ghost" id="btnTpl" title="Modèles de message"><i data-icon="fileText"></i> Modèles</button>
+    <button class="btn ghost" id="btnVault" title="Coffre à documents (CV, lettres…)"><i data-icon="archive"></i> Coffre <span id="vaultCount" class="count-mono"></span></button>
+    <button class="btn ghost" id="btnOutbox" title="Envois programmés et envoyés (SMTP)"><i data-icon="send"></i> Envois <span id="outboxCount" class="count-mono"></span></button>
+    <button class="btn ghost" id="btnStats" title="Statistiques"><i data-icon="chart"></i> Stats</button>
+  </nav>
+  <div id="clock"></div>
+  <button class="iconbtn" id="btnSettings" title="Réglages, export & import" aria-label="Réglages"><i data-icon="settings" data-size="18"></i></button>
+  <button class="iconbtn" id="btnNotif" title="Notifications" aria-label="Notifications" aria-expanded="false" aria-controls="notifPanel"><i data-icon="bell" data-size="18"></i><span id="notifBadge" hidden></span></button>
+</header>
+
+<!-- Panneau notifications (déroulé sous la cloche) -->
+<div id="notifPanel" hidden>
+  <div class="nphead">
+    <span>Notifications</span>
+    <button class="btn small ghost" id="npReadAll">Tout marquer lu</button>
+  </div>
+  <div id="npList"></div>
+</div>
+
+<section class="today" id="today" aria-label="Aujourd'hui"></section>
+
+<div class="stats" id="stats"></div>
+
+<div class="toolbar">
+  <div class="search">
+    <span class="ico"><i data-icon="search" data-size="15"></i></span>
+    <input type="search" id="q" placeholder="Rechercher une entreprise…" title="Cherche dans le nom, la ville, l'activité, les notes, l'email, l'interlocuteur et les étiquettes" autocomplete="off" aria-label="Rechercher une entreprise">
+  </div>
+  <select id="tagFilter" aria-label="Filtrer par campagne ou étiquette" hidden></select>
+  <select id="sort" aria-label="Trier">
+    <option value="urgence">Tri : urgence (relances d'abord)</option>
+    <option value="nom">Tri : nom A→Z</option>
+    <option value="dernier">Tri : dernier contact récent</option>
+    <option value="ancien">Tri : dernier contact ancien</option>
+    <option value="pertinence">Tri : pertinence</option>
+    <option value="statut">Tri : statut</option>
+  </select>
+  <button class="btn" id="viewToggle" title="Changer de vue"></button>
+  <button class="btn primary" id="btnAdd"><i data-icon="plus"></i> Ajouter</button>
+</div>
+
+<main>
+  <div class="wrap" id="tableWrap">
+    <table>
+      <thead>
+        <tr>
+          <th class="check"><input type="checkbox" id="checkAll" title="Tout sélectionner (visible)" aria-label="Tout sélectionner"></th>
+          <th>Entreprise</th>
+          <th class="w-pert" title="Pertinence dev">Pert.</th>
+          <th class="w-statut">Statut</th>
+          <th class="w-last">Dernier contact</th>
+          <th class="w-actions hide-sm"><span class="sr-only">Actions</span></th>
+        </tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+  </div>
+  <div class="kanban" id="kanban" hidden></div>
+  <div class="empty" id="empty" hidden></div>
+</main>
+
+<div id="selbar">
+  <span class="count" id="selCount" aria-live="polite"></span>
+  <button class="btn primary" id="btnContact"><i data-icon="mail"></i> Contacter</button>
+  <button class="btn ghost" id="btnClearSel">Désélectionner</button>
+</div>
+
+<div id="overlay"></div>
+
+<aside id="drawer" aria-label="Détail entreprise" inert>
+  <div class="dhead">
+    <h2 id="dTitle"></h2>
+    <button class="btn small" id="dEdit">Modifier</button>
+    <button class="iconbtn" id="dClose" title="Fermer" aria-label="Fermer"><i data-icon="x"></i></button>
+  </div>
+  <div class="dbody" id="dBody"></div>
+</aside>
+
+<div id="toasts" aria-live="polite"></div>
+
+<!-- ======== Modal Ajout / Édition ======== -->
+<div class="modal" id="mEdit" role="dialog" aria-modal="true" aria-labelledby="mEditTitle">
+  <div class="mbox">
+    <div class="mhead"><h2 id="mEditTitle">Ajouter une entreprise</h2><button class="iconbtn" data-close aria-label="Fermer"><i data-icon="x"></i></button></div>
+    <div class="mbody">
+      <div class="grid2">
+        <div class="field"><label for="f_nom">Nom *</label><input id="f_nom"></div>
+        <div class="field"><label for="f_activite">Secteur / activité</label><input id="f_activite"></div>
+        <div class="field"><label for="f_ville">Ville</label><input id="f_ville"></div>
+        <div class="field"><label for="f_cp">Code postal</label><input id="f_cp" inputmode="numeric"></div>
+      </div>
+      <div class="field"><label for="f_adresse">Adresse</label><input id="f_adresse"></div>
+      <div class="grid2">
+        <div class="field"><label for="f_email">Email</label><input id="f_email" type="email" placeholder="rh@entreprise.fr"></div>
+        <div class="field"><label for="f_tel">Téléphone</label><input id="f_tel" type="tel"></div>
+        <div class="field"><label for="f_contact_nom">Interlocuteur</label><input id="f_contact_nom" placeholder="ex : Mme Dupont"></div>
+        <div class="field"><label for="f_contact_poste">Poste de l'interlocuteur</label><input id="f_contact_poste" placeholder="ex : responsable RH"></div>
+      </div>
+      <div class="grid2">
+        <div class="field"><label for="f_url">Site web</label><input id="f_url" type="url" placeholder="https://…"></div>
+        <div class="field"><label for="f_entretien">Date d'entretien</label><input id="f_entretien" type="datetime-local"></div>
+      </div>
+      <div class="grid2">
+        <div class="field"><label for="f_pertinence">Pertinence dev</label>
+          <select id="f_pertinence"><option value="">— non évaluée —</option><option value="haute">Haute</option><option value="moyenne">Moyenne</option><option value="faible">Faible</option></select>
+        </div>
+        <div class="field"><label for="f_statut">Statut</label><select id="f_statut"></select></div>
+      </div>
+      <div class="field"><label for="f_pertnote">Justification pertinence</label><input id="f_pertnote" placeholder="ex : éditeur de logiciels, stack PHP…"></div>
+      <div class="field"><label for="f_note">Notes</label><textarea id="f_note" rows="3"></textarea></div>
+    </div>
+    <div class="mfoot">
+      <button class="btn danger push-left" id="f_delete" hidden>Supprimer</button>
+      <button class="btn" data-close>Annuler</button>
+      <button class="btn primary" id="f_save">Enregistrer</button>
+    </div>
+  </div>
+</div>
+
+<!-- ======== Modal Contacter ======== -->
+<div class="modal" id="mCompose" role="dialog" aria-modal="true" aria-labelledby="composeTitle">
+  <div class="mbox wide">
+    <div class="mhead"><h2 id="composeTitle">Contacter par email</h2><button class="iconbtn" data-close aria-label="Fermer"><i data-icon="x"></i></button></div>
+    <div class="mbody" id="composeBody"></div>
+    <div class="mfoot" id="composeFoot"></div>
+  </div>
+</div>
+
+<!-- ======== Modal Envois (SMTP) ======== -->
+<div class="modal" id="mOutbox" role="dialog" aria-modal="true" aria-labelledby="outboxTitle">
+  <div class="mbox wide">
+    <div class="mhead"><h2 id="outboxTitle">Envois</h2><span class="hint push-left-gap" id="outboxSummary"></span><button class="iconbtn" data-close aria-label="Fermer"><i data-icon="x"></i></button></div>
+    <div class="mbody"><div id="outboxList" class="oblist"></div></div>
+  </div>
+</div>
+
+<!-- ======== Modal Statistiques ======== -->
+<div class="modal" id="mStats" role="dialog" aria-modal="true" aria-labelledby="statsTitle">
+  <div class="mbox wide">
+    <div class="mhead"><h2 id="statsTitle">Statistiques</h2><button class="iconbtn" data-close aria-label="Fermer"><i data-icon="x"></i></button></div>
+    <div class="mbody" id="statsBody"></div>
+  </div>
+</div>
+
+<!-- ======== Modal Annuaire : compléter une fiche ======== -->
+<div class="modal" id="mEnrich" role="dialog" aria-modal="true" aria-labelledby="enrichTitle">
+  <div class="mbox wide">
+    <div class="mhead"><h2 id="enrichTitle">Compléter « <span id="enNom"></span> »</h2><button class="iconbtn" data-close aria-label="Fermer"><i data-icon="x"></i></button></div>
+    <div class="mbody">
+      <p class="hint mb">Recherche dans l'annuaire officiel des entreprises (data.gouv.fr) : SIREN, adresse, secteur, et si l'entreprise est toujours active.</p>
+      <div class="inline">
+        <div class="field grow"><label for="enQ">Nom</label><input id="enQ"></div>
+        <div class="field w-cp"><label for="enCp">Code postal</label><input id="enCp" inputmode="numeric"></div>
+        <button class="btn primary align-end" id="enSearch"><i data-icon="search"></i> Chercher</button>
+      </div>
+      <label class="checkline"><input type="checkbox" id="enOverwrite"> Remplacer aussi les champs déjà remplis (adresse, ville, activité)</label>
+      <div id="enResults" class="annlist"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ======== Modal Annuaire : découvrir ======== -->
+<div class="modal" id="mDiscover" role="dialog" aria-modal="true" aria-labelledby="discoverTitle">
+  <div class="mbox wide">
+    <div class="mhead"><h2 id="discoverTitle">Découvrir des entreprises</h2><button class="iconbtn" data-close aria-label="Fermer"><i data-icon="x"></i></button></div>
+    <div class="mbody">
+      <fieldset class="field">
+        <legend class="flabel">Source</legend>
+        <div class="radiorow compact" id="diSource">
+          <label><input type="radio" name="diSource" value="annuaire" checked><span>Annuaire des entreprises<small>Entreprises actives par secteur</small></span></label>
+          <label><input type="radio" name="diSource" value="lba"><span>La bonne alternance<small>Offres et recruteurs alternance</small></span></label>
+          <label><input type="radio" name="diSource" value="portals"><span>Portails d'offres<small>Sites d'emploi et sources perso</small></span></label>
+        </div>
+      </fieldset>
+      <p class="hint mb" data-source="annuaire">Entreprises actives d'un département par secteur (data.gouv.fr).</p>
+      <div data-source="lba" hidden>
+        <p class="hint mb">Offres d'alternance publiées et entreprises qui recrutent souvent des alternants.</p>
+        <p class="hint warn mb" id="lbMissing" hidden>Aucun jeton enregistré : ajoute-le dans <button class="linkbtn" id="lbOpenSettings">Réglages → La bonne alternance</button>.</p>
+      </div>
+      <div class="inline" data-not-source="portals">
+        <div class="field w-cp"><label for="diDep">Département</label><input id="diDep" placeholder="76" maxlength="3" inputmode="numeric"></div>
+        <div class="field w-auto" data-source="lba" hidden><label for="lbNiveau">Niveau visé</label><select id="lbNiveau"></select></div>
+      </div>
+      <fieldset class="field" data-source="annuaire">
+        <legend class="flabel">Secteurs</legend>
+        <div id="diNaf" class="checkgrid"></div>
+      </fieldset>
+      <fieldset class="field" data-source="lba" hidden>
+        <legend class="flabel">Métiers</legend>
+        <div id="lbMetiers" class="checkgrid"></div>
+      </fieldset>
+      <button class="btn primary" id="diSearch" data-not-source="portals"><i data-icon="search"></i> Chercher</button>
+
+      <div data-source="portals" hidden>
+        <div class="grid3">
+          <div class="field"><label for="poQuery">Mots-clés</label><input id="poQuery" placeholder="développeur, fullstack…" value="développeur"></div>
+          <div class="field"><label for="poLoc">Ville ou département</label><input id="poLoc" placeholder="Rouen, 76, Paris…"></div>
+          <div class="field"><label for="poContrat">Type</label>
+            <select id="poContrat">
+              <option value="stage">Stage</option>
+              <option value="alternance">Alternance</option>
+              <option value="emploi">Emploi</option>
+              <option value="">Tous</option>
+            </select>
+          </div>
+        </div>
+        <div id="poList" class="portal-grid"></div>
+        <details class="sacc mt" id="poAddBox">
+          <summary><span>Ajouter une source personnalisée</span></summary>
+          <div class="sacc-body">
+            <p class="hint mb">Variables disponibles : <code>{q}</code> (mots-clés), <code>{loc}</code> (lieu), <code>{contrat}</code> (type).</p>
+            <div class="grid2">
+              <div class="field"><label for="poNewName">Nom</label><input id="poNewName" placeholder="ex : Stage.fr" maxlength="40"></div>
+              <div class="field"><label for="poNewUrl">URL avec variables</label><input id="poNewUrl" type="url" placeholder="https://exemple.fr/offres?q={q}&amp;l={loc}"></div>
+            </div>
+            <button class="btn primary small" id="poAddBtn" type="button"><i data-icon="plus"></i> Ajouter cette source</button>
+          </div>
+        </details>
+      </div>
+
+      <div id="diResults" class="annlist" aria-live="polite"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ======== Modal Modèles ======== -->
+<div class="modal" id="mTpl" role="dialog" aria-modal="true" aria-labelledby="tplTitle">
+  <div class="mbox wide">
+    <div class="mhead"><h2 id="tplTitle">Modèles de message</h2><button class="iconbtn" data-close aria-label="Fermer"><i data-icon="x"></i></button></div>
+    <div class="mbody">
+      <p class="hint mb">Variables : <code>{entreprise}</code> <code>{ville}</code> <code>{activite}</code> <code>{interlocuteur}</code> (nom de l'interlocuteur, sinon « Madame, Monsieur ») et <code>{moi.nom}</code> <code>{moi.tel}</code> <code>{moi.email}</code> (Réglages → Identité). Un texte entre crochets, comme <code>[intitulé du poste]</code>, est signalé avant l'envoi. Le bouton « Relancer » d'une fiche ouvre le premier modèle de type <b>Relance</b>.</p>
+      <div id="tplList"></div>
+      <button class="btn small mt" id="tplAdd"><i data-icon="plus"></i> Nouveau modèle</button>
+      <div id="tplEditor" class="tpl-editor" hidden>
+        <div class="grid2">
+          <div class="field"><label for="t_name">Nom du modèle</label><input id="t_name"></div>
+          <div class="field"><label for="t_kind">Type</label><select id="t_kind"></select></div>
+        </div>
+        <div class="field"><label for="t_subject">Objet</label><input id="t_subject"></div>
+        <div class="field"><label for="t_body">Corps</label><textarea id="t_body" rows="10"></textarea></div>
+        <div class="btnrow end">
+          <button class="btn" id="t_cancel">Annuler</button>
+          <button class="btn primary" id="t_save">Enregistrer le modèle</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ======== Modal Coffre ======== -->
+<div class="modal" id="mVault" role="dialog" aria-modal="true" aria-labelledby="vaultTitle">
+  <div class="mbox">
+    <div class="mhead"><h2 id="vaultTitle">Coffre à documents</h2><button class="iconbtn" data-close aria-label="Fermer"><i data-icon="x"></i></button></div>
+    <div class="mbody">
+      <p class="hint mb">CV, lettres de motivation, portfolio PDF… rangés sur ce PC (db/coffre/), chaque fichier une seule fois, même dans les sauvegardes. En envoi direct (SMTP), tu peux les joindre automatiquement.</p>
+      <div class="kpis compact mb" id="vaultUsage"></div>
+      <div class="doclist" id="docList"></div>
+      <div class="docpreview mt" id="docPreview" hidden></div>
+      <label class="btn mt"><i data-icon="plus"></i> Ajouter un document<input type="file" id="docInput" multiple class="visually-hidden"></label>
+    </div>
+  </div>
+</div>
+
+<!-- ======== Modal Noter un contact ======== -->
+<div class="modal" id="mLog" role="dialog" aria-modal="true" aria-labelledby="logTitle">
+  <div class="mbox narrow">
+    <div class="mhead"><h2 id="logTitle">Noter un échange — <span id="logNom"></span></h2><button class="iconbtn" data-close aria-label="Fermer"><i data-icon="x"></i></button></div>
+    <div class="mbody">
+      <div class="grid2">
+        <div class="field"><label for="logType">Type</label>
+          <select id="logType">
+            <option value="contact">Contact</option>
+            <option value="relance">Relance</option>
+            <option value="note">Simple note</option>
+          </select>
+        </div>
+        <div class="field"><label for="logMoyen">Moyen</label>
+          <input id="logMoyen" list="logMoyens">
+          <datalist id="logMoyens">
+            <option value="Tél"></option><option value="Formulaire"></option><option value="LinkedIn"></option>
+            <option value="Sur place"></option><option value="Salon / forum"></option><option value="Mail"></option><option value="Autre"></option>
+          </datalist>
+        </div>
+      </div>
+      <div class="field"><label for="logDate">Date</label><input id="logDate" type="datetime-local"></div>
+      <div class="field" id="logTplField"><label for="logTpl">Modèle de message utilisé (optionnel)</label>
+        <select id="logTpl"></select>
+        <p class="hint mt-s">Sert aux statistiques « Efficacité par modèle ».</p>
+      </div>
+      <div class="field"><label for="logNote">Note (optionnel)</label><textarea id="logNote" rows="3" placeholder="ex : a demandé de rappeler lundi"></textarea></div>
+    </div>
+    <div class="mfoot">
+      <button class="btn" data-close>Annuler</button>
+      <button class="btn primary" id="logSave">Enregistrer</button>
+    </div>
+  </div>
+</div>
+
+<!-- ======== Modal Réglages ======== -->
+<div class="modal" id="mSettings" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+  <div class="mbox">
+    <div class="mhead"><h2 id="settingsTitle">Réglages</h2><button class="iconbtn" data-close aria-label="Fermer"><i data-icon="x"></i></button></div>
+    <div class="mbody sacc-list">
+
+      <details class="sacc" id="secGeneral" open>
+        <summary><span>Général</span></summary>
+        <div class="sacc-body">
+          <div class="grid2">
+            <div class="field">
+              <label for="s_delai">Délai de relance (jours)</label>
+              <input id="s_delai" type="number" min="1" max="60" class="w-num">
+            </div>
+            <div class="field">
+              <label for="s_mailopen">Mode d'envoi</label>
+              <select id="s_mailopen">
+                <option value="gmail">Brouillon Gmail</option>
+                <option value="outlook">Brouillon Outlook.com</option>
+                <option value="mailto">Application mail (mailto:)</option>
+                <option value="smtp">Envoi direct (SMTP)</option>
+              </select>
+            </div>
+          </div>
+          <p class="hint" id="sendModeHint"></p>
+
+          <div class="grid2 mt-s">
+            <div class="field"><label for="s_me_nom">Nom (<code>{moi.nom}</code>)</label><input id="s_me_nom" autocomplete="name" maxlength="80"></div>
+            <div class="field"><label for="s_me_tel">Téléphone (<code>{moi.tel}</code>)</label><input id="s_me_tel" type="tel" autocomplete="tel" maxlength="80"></div>
+          </div>
+
+          <div class="sacc-row mt-s">
+            <label class="checkline"><input type="checkbox" id="s_notif"> Notifications Windows (réponses, relances, entretiens)</label>
+            <button class="btn small" id="bTestNotif">Tester</button>
+          </div>
+        </div>
+      </details>
+
+      <details class="sacc" id="secMail">
+        <summary><span>Boîte mail (IMAP / SMTP)</span><span class="sacc-badge" id="mailBadge">Non configurée</span></summary>
+        <div class="sacc-body">
+          <div class="grid2">
+            <div class="field"><label for="s_mail_preset">Fournisseur</label>
+              <select id="s_mail_preset"><option value="">— choisir —</option><option value="gmail">Gmail</option><option value="outlook">Outlook / Hotmail</option><option value="custom">Autre</option></select>
+            </div>
+            <div class="field"><label for="s_mail_user">Adresse email</label><input id="s_mail_user" type="email" placeholder="toi@gmail.com" autocomplete="off"></div>
+            <div class="field"><label for="s_mail_host">Serveur IMAP</label><input id="s_mail_host" placeholder="imap.gmail.com"></div>
+            <div class="field"><label for="s_mail_port">Port IMAP</label><input id="s_mail_port" type="number" min="1" max="65535" placeholder="993"></div>
+            <div class="field"><label for="s_smtp_host">Serveur SMTP</label><input id="s_smtp_host" placeholder="smtp.gmail.com"></div>
+            <div class="field"><label for="s_smtp_port">Port SMTP</label><input id="s_smtp_port" type="number" min="1" max="65535" placeholder="465"></div>
+            <div class="field"><label for="s_mail_pass">Mot de passe (<a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noopener noreferrer">app Gmail ↗</a>)</label><input id="s_mail_pass" type="password" autocomplete="new-password"></div>
+            <div class="field"><label for="s_mail_poll">Relève (minutes)</label><input id="s_mail_poll" type="number" min="1" max="120" placeholder="5"></div>
+          </div>
+          <div class="btnrow">
+            <button class="btn primary" id="bSaveMail">Enregistrer</button>
+            <button class="btn" id="bTestMail">Tester IMAP</button>
+            <button class="btn" id="bTestSmtp">Tester SMTP</button>
+            <button class="btn" id="bCheckMail">Relever</button>
+            <button class="btn danger" id="bClearMail" hidden>Déconnecter</button>
+          </div>
+          <p class="hint mt-s" id="mailStatus" role="status"></p>
+        </div>
+      </details>
+
+      <details class="sacc" id="secLba">
+        <summary><span>La bonne alternance</span><span class="sacc-badge" id="lbaBadge">Non configuré</span></summary>
+        <div class="sacc-body">
+          <p class="hint mb">Jeton Production (<a href="https://api.apprentissage.beta.gouv.fr" target="_blank" rel="noopener noreferrer">api.apprentissage.beta.gouv.fr ↗</a>), stocké dans Windows Credential Manager.</p>
+          <div class="field"><label for="s_lba_token">Jeton</label><input id="s_lba_token" type="password" autocomplete="off" spellcheck="false"></div>
+          <div class="btnrow">
+            <button class="btn primary" id="bSaveLba">Vérifier et enregistrer</button>
+            <button class="btn danger" id="bClearLba" hidden>Supprimer</button>
+          </div>
+          <p class="hint mt-s" id="lbaStatus" role="status"></p>
+        </div>
+      </details>
+
+      <details class="sacc" id="secBackup">
+        <summary><span>Sauvegarde &amp; export</span></summary>
+        <div class="sacc-body">
+          <div class="btnrow">
+            <button class="btn" id="btnExportJson">Exporter JSON</button>
+            <button class="btn" id="btnExportCsv">Exporter CSV</button>
+            <label class="btn">Importer JSON<input type="file" id="importInput" accept=".json" class="visually-hidden"></label>
+          </div>
+        </div>
+      </details>
+
+      <details class="sacc danger" id="secDanger">
+        <summary><span>Zone dangereuse</span></summary>
+        <div class="sacc-body">
+          <p class="hint mb">Réinitialise la liste d'entreprises (une sauvegarde automatique est créée dans <code>db/backups</code>).</p>
+          <button class="btn danger" id="btnReset">Réinitialiser les données…</button>
+        </div>
+      </details>
+
+    </div>
+  </div>
+</div>
+
+<!-- ======== Modal Réponse reçue ======== -->
+<div class="modal" id="mReponse" role="dialog" aria-modal="true" aria-labelledby="repTitle">
+  <div class="mbox narrow">
+    <div class="mhead"><h2 id="repTitle">Réponse reçue — et ensuite ?</h2><button class="iconbtn" data-close aria-label="Fermer"><i data-icon="x"></i></button></div>
+    <div class="mbody">
+      <p class="hint mb">Quel est le résultat pour <b id="repNom" class="txt"></b> ?</p>
+      <div class="radiorow" id="repChoices"></div>
+      <div class="field"><label for="repNote">Note (optionnel)</label><input id="repNote" placeholder="ex : entretien prévu le 24/07 à 14h"></div>
+    </div>
+    <div class="mfoot">
+      <button class="btn" data-close>Annuler</button>
+      <button class="btn primary" id="repSave">Enregistrer</button>
+    </div>
+  </div>
+</div>
+
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
